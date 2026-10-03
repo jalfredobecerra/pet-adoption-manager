@@ -176,7 +176,7 @@ const requiredInputs = {
   ]
 };
 
-module.exports = function buildOpenApi() {
+function buildOpenApi() {
   const schemas = {
     Error: object({
       error: object(
@@ -636,4 +636,215 @@ module.exports = function buildOpenApi() {
     },
     paths
   };
+};
+
+module.exports = function updatedOpenApi() {
+  const specification = buildOpenApi();
+
+  specification.info.version = '0.2.0';
+
+  specification.info.description = [
+    'Week 5: complete CRUD for shelters and pets.',
+    '',
+    '[Sign in with Google](/auth/google), then return here.',
+    'Use GET /auth/me to check your identity and application role.',
+    'New identities must complete POST /api/users.',
+    '',
+    'Public GET operations do not require sign-in.',
+    'Protected operations use the browser session cookie.',
+    'Before writes, obtain GET /auth/csrf and enter its token',
+    'through Authorize → csrfToken.',
+    '',
+    'POST and PUT validate permitted fields.',
+    'PUT updates supplied fields and preserves omitted fields.',
+    'Unknown fields and empty updates return 400.',
+    '',
+    'Remaining user and application writes are planned for Week 6.'
+  ].join('\n');
+
+  const schemas = specification.components.schemas;
+
+  schemas.Error.properties.error.properties.details = {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        field: {
+          type: 'string',
+          example: 'ageMonths'
+        },
+        message: {
+          type: 'string',
+          example: 'Age must be nonnegative.'
+        }
+      }
+    }
+  };
+
+  for (const name of [
+    'Shelter',
+    'ShelterCreate',
+    'ShelterUpdate',
+    'Pet',
+    'PetCreate',
+    'PetUpdate'
+  ]) {
+    for (const [field, property] of Object.entries(
+      schemas[name].properties
+    )) {
+      if (
+        property.type === 'string' &&
+        !['_id', 'shelterId', 'createdAt', 'updatedAt'].includes(field)
+      ) {
+        property.minLength = field === 'name' ? 2 : 1;
+      }
+    }
+  }
+
+  schemas.PetCreate.properties.adoptionStatus.default = 'available';
+
+  schemas.ShelterUpdate.required = [];
+  schemas.PetUpdate.required = [];
+
+  schemas.ShelterUpdate.minProperties = 1;
+  schemas.PetUpdate.minProperties = 1;
+
+  const json = (description, schema) => ({
+    description,
+    content: {
+      'application/json': {
+        schema
+      }
+    }
+  });
+
+  const error = (description) =>
+    json(description, {
+      $ref: '#/components/schemas/Error'
+    });
+
+  const security = [
+    {
+      sessionCookie: [],
+      csrfToken: []
+    }
+  ];
+
+  const permissions = {
+    shelters: {
+      post: 'Administrator only. Creates a shelter.',
+      put: 'Administrator or staff assigned to this shelter. Updates supplied fields.',
+      delete: 'Administrator only. Deletes a shelter only when no pets, applications, or assigned users reference it.'
+    },
+    pets: {
+      post: 'Administrator or staff assigned to the supplied shelter. The referenced shelter must exist.',
+      put: 'Administrator or staff of the current shelter. Only administrators may move a pet to another shelter, and pets with application records cannot be moved.',
+      delete: 'Administrator or staff of the current shelter. Pets with application records cannot be deleted.'
+    }
+  };
+
+  for (const resource of ['shelters', 'pets']) {
+    const settings = resources[resource];
+
+    const collectionPath = `/api/${resource}`;
+    const itemPath =
+      `${collectionPath}/{${settings.idParam}}`;
+
+    for (const method of ['post', 'put', 'delete']) {
+      const responses = {
+        400: error(
+          'Invalid ID, malformed JSON, or invalid request fields.'
+        ),
+        401: error('Google sign-in required.'),
+        403: error(
+          'Profile incomplete, insufficient permissions, or invalid CSRF token.'
+        ),
+        409: error(
+          'Referenced records prevent the operation, or a duplicate record exists.'
+        ),
+        500: error('Unexpected database or server failure.')
+      };
+
+      if (method !== 'post' || resource === 'pets') {
+        responses[404] = error(
+          'Record or referenced shelter not found.'
+        );
+      }
+
+      const successStatus =
+        method === 'post'
+          ? 201
+          : method === 'put'
+            ? 200
+            : 204;
+
+      responses[successStatus] =
+        method === 'delete'
+          ? {
+              description: 'Deleted successfully. Empty response body.'
+            }
+          : json(
+              method === 'post'
+                ? 'Created successfully.'
+                : 'Updated successfully.',
+              {
+                type: 'object',
+                properties: {
+                  data: {
+                    $ref:
+                      `#/components/schemas/${settings.schema}`
+                  }
+                }
+              }
+            );
+
+      const operation = {
+        tags: [settings.schema],
+        operationId: `${method}${settings.schema}`,
+        summary: `${method.toUpperCase()} ${resource}`,
+        description:
+          `${permissions[resource][method]} ` +
+          'String fields are trimmed. Request fields are allowlisted.',
+        'x-implementation-status': 'implemented',
+        security,
+        parameters:
+          method === 'post'
+            ? []
+            : [
+                {
+                  name: settings.idParam,
+                  in: 'path',
+                  required: true,
+                  schema: {
+                    type: 'string',
+                    pattern: '^[a-fA-F0-9]{24}$'
+                  }
+                }
+              ],
+        responses
+      };
+
+      if (method !== 'delete') {
+        operation.requestBody = {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                $ref:
+                  `#/components/schemas/${settings.schema}` +
+                  (method === 'post' ? 'Create' : 'Update')
+              }
+            }
+          }
+        };
+      }
+
+      const path =
+        method === 'post' ? collectionPath : itemPath;
+
+      specification.paths[path][method] = operation;
+    }
+  }
+
+  return specification;
 };

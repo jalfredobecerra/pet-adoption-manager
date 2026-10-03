@@ -1,0 +1,3304 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Pet Adoption Manager API",
+    "version": "0.2.0",
+    "description": "Week 5: complete CRUD for shelters and pets.\n\n[Sign in with Google](/auth/google), then return here.\nUse GET /auth/me to check your identity and application role.\nNew identities must complete POST /api/users.\n\nPublic GET operations do not require sign-in.\nProtected operations use the browser session cookie.\nBefore writes, obtain GET /auth/csrf and enter its token\nthrough Authorize → csrfToken.\n\nPOST and PUT validate permitted fields.\nPUT updates supplied fields and preserves omitted fields.\nUnknown fields and empty updates return 400.\n\nRemaining user and application writes are planned for Week 6."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The current local or Render server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "User"
+    },
+    {
+      "name": "Shelter"
+    },
+    {
+      "name": "Pet"
+    },
+    {
+      "name": "Application"
+    },
+    {
+      "name": "Authentication"
+    },
+    {
+      "name": "System"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "pa.sid",
+        "description": "Created by Google sign-in. The browser manages this HttpOnly cookie; do not paste a cookie value into Swagger."
+      },
+      "csrfToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "Token returned by GET /auth/csrf."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "integer",
+                "example": 400
+              },
+              "message": {
+                "type": "string",
+                "example": "Invalid document ID."
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": "string",
+                      "example": "ageMonths"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Age must be nonnegative."
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "status",
+              "message"
+            ]
+          }
+        },
+        "required": []
+      },
+      "UserCreate": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 80,
+            "example": "Julian Becerra",
+            "minLength": 2
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "Csrf": {
+        "type": "object",
+        "properties": {
+          "csrfToken": {
+            "type": "string",
+            "example": "copy-the-token-returned-by-this-endpoint"
+          }
+        },
+        "required": []
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "example": "ok"
+          },
+          "database": {
+            "type": "string",
+            "enum": [
+              "connected",
+              "disconnected"
+            ],
+            "example": "connected"
+          }
+        },
+        "required": []
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011",
+            "readOnly": true
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 80,
+            "example": "Julian Becerra",
+            "minLength": 2
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "adopter",
+              "shelterStaff",
+              "admin"
+            ],
+            "example": "adopter"
+          },
+          "shelterId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": []
+      },
+      "UserUpdate": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 80,
+            "example": "Julian Becerra",
+            "minLength": 2
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "adopter",
+              "shelterStaff",
+              "admin"
+            ],
+            "example": "adopter"
+          },
+          "shelterId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          }
+        },
+        "required": [],
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "Shelter": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Example Animal Shelter",
+            "minLength": 2
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "A demonstration shelter.",
+            "minLength": 1
+          },
+          "contactEmail": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254,
+            "example": "contact@example.invalid",
+            "minLength": 1
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 30,
+            "example": "555-0100",
+            "minLength": 1
+          },
+          "streetAddress": {
+            "type": "string",
+            "maxLength": 200,
+            "example": "100 Example Street",
+            "minLength": 1
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Example City",
+            "minLength": 1
+          },
+          "stateOrRegion": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Example Region",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": "string",
+            "maxLength": 20,
+            "example": "00000",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": []
+      },
+      "ShelterCreate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Example Animal Shelter",
+            "minLength": 2
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "A demonstration shelter.",
+            "minLength": 1
+          },
+          "contactEmail": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254,
+            "example": "contact@example.invalid",
+            "minLength": 1
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 30,
+            "example": "555-0100",
+            "minLength": 1
+          },
+          "streetAddress": {
+            "type": "string",
+            "maxLength": 200,
+            "example": "100 Example Street",
+            "minLength": 1
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Example City",
+            "minLength": 1
+          },
+          "stateOrRegion": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Example Region",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": "string",
+            "maxLength": 20,
+            "example": "00000",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "contactEmail",
+          "phone",
+          "streetAddress",
+          "city",
+          "stateOrRegion",
+          "postalCode"
+        ],
+        "additionalProperties": false
+      },
+      "ShelterUpdate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Example Animal Shelter",
+            "minLength": 2
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "A demonstration shelter.",
+            "minLength": 1
+          },
+          "contactEmail": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254,
+            "example": "contact@example.invalid",
+            "minLength": 1
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 30,
+            "example": "555-0100",
+            "minLength": 1
+          },
+          "streetAddress": {
+            "type": "string",
+            "maxLength": 200,
+            "example": "100 Example Street",
+            "minLength": 1
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Example City",
+            "minLength": 1
+          },
+          "stateOrRegion": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Example Region",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": "string",
+            "maxLength": 20,
+            "example": "00000",
+            "minLength": 1
+          }
+        },
+        "required": [],
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "Pet": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "example": "Luna",
+            "minLength": 2
+          },
+          "species": {
+            "type": "string",
+            "enum": [
+              "dog",
+              "cat",
+              "rabbit",
+              "bird",
+              "other"
+            ],
+            "example": "dog",
+            "minLength": 1
+          },
+          "breed": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Mixed breed",
+            "minLength": 1
+          },
+          "ageMonths": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 18
+          },
+          "sex": {
+            "type": "string",
+            "enum": [
+              "male",
+              "female",
+              "unknown"
+            ],
+            "example": "male",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "A friendly demonstration pet.",
+            "minLength": 1
+          },
+          "adoptionStatus": {
+            "type": "string",
+            "enum": [
+              "available",
+              "pending",
+              "adopted"
+            ],
+            "example": "available",
+            "minLength": 1,
+            "default": "available"
+          },
+          "shelterId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "photoUrl": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://",
+            "maxLength": 1000,
+            "example": "https://example.com/luna.jpg",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": []
+      },
+      "PetCreate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "example": "Luna",
+            "minLength": 2
+          },
+          "species": {
+            "type": "string",
+            "enum": [
+              "dog",
+              "cat",
+              "rabbit",
+              "bird",
+              "other"
+            ],
+            "example": "dog",
+            "minLength": 1
+          },
+          "breed": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Mixed breed",
+            "minLength": 1
+          },
+          "ageMonths": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 18
+          },
+          "sex": {
+            "type": "string",
+            "enum": [
+              "male",
+              "female",
+              "unknown"
+            ],
+            "example": "male",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "A friendly demonstration pet.",
+            "minLength": 1
+          },
+          "adoptionStatus": {
+            "type": "string",
+            "enum": [
+              "available",
+              "pending",
+              "adopted"
+            ],
+            "example": "available",
+            "minLength": 1,
+            "default": "available"
+          },
+          "shelterId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "photoUrl": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://",
+            "maxLength": 1000,
+            "example": "https://example.com/luna.jpg",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "species",
+          "breed",
+          "ageMonths",
+          "sex",
+          "description",
+          "shelterId"
+        ],
+        "additionalProperties": false
+      },
+      "PetUpdate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "example": "Luna",
+            "minLength": 2
+          },
+          "species": {
+            "type": "string",
+            "enum": [
+              "dog",
+              "cat",
+              "rabbit",
+              "bird",
+              "other"
+            ],
+            "example": "dog",
+            "minLength": 1
+          },
+          "breed": {
+            "type": "string",
+            "maxLength": 100,
+            "example": "Mixed breed",
+            "minLength": 1
+          },
+          "ageMonths": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 18
+          },
+          "sex": {
+            "type": "string",
+            "enum": [
+              "male",
+              "female",
+              "unknown"
+            ],
+            "example": "male",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "A friendly demonstration pet.",
+            "minLength": 1
+          },
+          "adoptionStatus": {
+            "type": "string",
+            "enum": [
+              "available",
+              "pending",
+              "adopted"
+            ],
+            "example": "available",
+            "minLength": 1,
+            "default": "available"
+          },
+          "shelterId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "photoUrl": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://",
+            "maxLength": 1000,
+            "example": "https://example.com/luna.jpg",
+            "minLength": 1
+          }
+        },
+        "required": [],
+        "minProperties": 1,
+        "additionalProperties": false
+      },
+      "Application": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011",
+            "readOnly": true
+          },
+          "petId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "adopterId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "shelterId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "contactPhone": {
+            "type": "string",
+            "maxLength": 30,
+            "example": "555-0101"
+          },
+          "housingType": {
+            "type": "string",
+            "enum": [
+              "house",
+              "apartment",
+              "other"
+            ],
+            "example": "house"
+          },
+          "hasOtherPets": {
+            "type": "boolean",
+            "example": false
+          },
+          "motivation": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "I can provide a suitable home for this pet.",
+            "minLength": 10
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "submitted",
+              "underReview",
+              "approved",
+              "rejected",
+              "withdrawn"
+            ],
+            "example": "submitted"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "reviewedBy": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "reviewedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": []
+      },
+      "ApplicationCreate": {
+        "type": "object",
+        "properties": {
+          "petId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "contactPhone": {
+            "type": "string",
+            "maxLength": 30,
+            "example": "555-0101"
+          },
+          "housingType": {
+            "type": "string",
+            "enum": [
+              "house",
+              "apartment",
+              "other"
+            ],
+            "example": "house"
+          },
+          "hasOtherPets": {
+            "type": "boolean",
+            "example": false
+          },
+          "motivation": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "I can provide a suitable home for this pet.",
+            "minLength": 10
+          }
+        },
+        "required": [
+          "petId",
+          "contactPhone",
+          "housingType",
+          "hasOtherPets",
+          "motivation"
+        ],
+        "additionalProperties": false
+      },
+      "ApplicationUpdate": {
+        "type": "object",
+        "properties": {
+          "contactPhone": {
+            "type": "string",
+            "maxLength": 30,
+            "example": "555-0101"
+          },
+          "housingType": {
+            "type": "string",
+            "enum": [
+              "house",
+              "apartment",
+              "other"
+            ],
+            "example": "house"
+          },
+          "hasOtherPets": {
+            "type": "boolean",
+            "example": false
+          },
+          "motivation": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "I can provide a suitable home for this pet.",
+            "minLength": 10
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "submitted",
+              "underReview",
+              "approved",
+              "rejected",
+              "withdrawn"
+            ],
+            "example": "submitted"
+          }
+        },
+        "required": [],
+        "minProperties": 1,
+        "additionalProperties": false
+      }
+    }
+  },
+  "paths": {
+    "/api/users": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "listUser",
+        "summary": "List users",
+        "description": "Lists require an administrator. Individual reads allow the owner or an administrator. OAuth identifiers and email are omitted from these GET responses. Results are paginated and ordered by ID. Unsupported query parameters return 400.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Records visible to the current caller; data may be empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "postUser",
+        "summary": "Complete your OAuth profile",
+        "description": "Creates the current verified OAuth identity’s profile. Optional displayName may be supplied. Identity, email, and adopter role come from the server. A second creation attempt returns 409.",
+        "x-implementation-status": "implemented",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Profile created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate profile or planned relationship conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{userId}": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "getUser",
+        "summary": "Get one user",
+        "description": "Lists require an administrator. Individual reads allow the owner or an administrator. OAuth identifiers and email are omitted from these GET responses.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "MongoDB document identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One visible record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record not found or outside caller scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "putUser",
+        "summary": "[Week 6 planned] PUT users",
+        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Lists require an administrator. Individual reads allow the owner or an administrator. OAuth identifiers and email are omitted from these GET responses. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
+        "x-implementation-status": "planned",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "MongoDB document identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Planned Week 6 success response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Planned Week 6 response when the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate profile or planned relationship conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Current Week 5 response: operation is planned for Week 6.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdate"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "deleteUser",
+        "summary": "[Week 6 planned] DELETE users",
+        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Lists require an administrator. Individual reads allow the owner or an administrator. OAuth identifiers and email are omitted from these GET responses. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
+        "x-implementation-status": "planned",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "MongoDB document identifier."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Planned Week 6 deletion success."
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Planned Week 6 response when the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate profile or planned relationship conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Current Week 5 response: operation is planned for Week 6.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shelters": {
+      "get": {
+        "tags": [
+          "Shelter"
+        ],
+        "operationId": "listShelter",
+        "summary": "List shelters",
+        "description": "Public reads. Planned creates and deletes require an administrator; updates allow assigned shelter staff or an administrator. Results are paginated and ordered by ID. Unsupported query parameters return 400.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Records visible to the current caller; data may be empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Shelter"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Shelter"
+        ],
+        "operationId": "postShelter",
+        "summary": "POST shelters",
+        "description": "Administrator only. Creates a shelter. String fields are trimmed. Request fields are allowlisted.",
+        "x-implementation-status": "implemented",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Shelter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database or server failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShelterCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shelters/{shelterId}": {
+      "get": {
+        "tags": [
+          "Shelter"
+        ],
+        "operationId": "getShelter",
+        "summary": "Get one shelter",
+        "description": "Public reads. Planned creates and deletes require an administrator; updates allow assigned shelter staff or an administrator.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "shelterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "MongoDB document identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One visible record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Shelter"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record not found or outside caller scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Shelter"
+        ],
+        "operationId": "putShelter",
+        "summary": "PUT shelters",
+        "description": "Administrator or staff assigned to this shelter. Updates supplied fields. String fields are trimmed. Request fields are allowlisted.",
+        "x-implementation-status": "implemented",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "shelterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Shelter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record or referenced shelter not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database or server failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShelterUpdate"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Shelter"
+        ],
+        "operationId": "deleteShelter",
+        "summary": "DELETE shelters",
+        "description": "Administrator only. Deletes a shelter only when no pets, applications, or assigned users reference it. String fields are trimmed. Request fields are allowlisted.",
+        "x-implementation-status": "implemented",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "shelterId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted successfully. Empty response body."
+          },
+          "400": {
+            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record or referenced shelter not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database or server failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pets": {
+      "get": {
+        "tags": [
+          "Pet"
+        ],
+        "operationId": "listPet",
+        "summary": "List pets",
+        "description": "Public reads. Planned writes allow staff of the owning shelter or an administrator. Results are paginated and ordered by ID. Unsupported query parameters return 400.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "species",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "dog",
+                "cat",
+                "rabbit",
+                "bird",
+                "other"
+              ],
+              "example": "dog",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "available",
+                "pending",
+                "adopted"
+              ],
+              "example": "available",
+              "minLength": 1,
+              "default": "available"
+            }
+          },
+          {
+            "name": "shelterId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Records visible to the current caller; data may be empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Pet"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pet"
+        ],
+        "operationId": "postPet",
+        "summary": "POST pets",
+        "description": "Administrator or staff assigned to the supplied shelter. The referenced shelter must exist. String fields are trimmed. Request fields are allowlisted.",
+        "x-implementation-status": "implemented",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Pet"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record or referenced shelter not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database or server failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PetCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pets/{petId}": {
+      "get": {
+        "tags": [
+          "Pet"
+        ],
+        "operationId": "getPet",
+        "summary": "Get one pet",
+        "description": "Public reads. Planned writes allow staff of the owning shelter or an administrator.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "MongoDB document identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One visible record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Pet"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record not found or outside caller scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Pet"
+        ],
+        "operationId": "putPet",
+        "summary": "PUT pets",
+        "description": "Administrator or staff of the current shelter. Only administrators may move a pet to another shelter, and pets with application records cannot be moved. String fields are trimmed. Request fields are allowlisted.",
+        "x-implementation-status": "implemented",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Pet"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record or referenced shelter not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database or server failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PetUpdate"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Pet"
+        ],
+        "operationId": "deletePet",
+        "summary": "DELETE pets",
+        "description": "Administrator or staff of the current shelter. Pets with application records cannot be deleted. String fields are trimmed. Request fields are allowlisted.",
+        "x-implementation-status": "implemented",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted successfully. Empty response body."
+          },
+          "400": {
+            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record or referenced shelter not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database or server failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications": {
+      "get": {
+        "tags": [
+          "Application"
+        ],
+        "operationId": "listApplication",
+        "summary": "List applications",
+        "description": "Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator. Results are paginated and ordered by ID. Unsupported query parameters return 400.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Records visible to the current caller; data may be empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Application"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Application"
+        ],
+        "operationId": "postApplication",
+        "summary": "[Week 6 planned] POST applications",
+        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
+        "x-implementation-status": "planned",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Planned Week 6 success response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Application"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Planned Week 6 response when the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate profile or planned relationship conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Current Week 5 response: operation is planned for Week 6.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/applications/{applicationId}": {
+      "get": {
+        "tags": [
+          "Application"
+        ],
+        "operationId": "getApplication",
+        "summary": "Get one application",
+        "description": "Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "MongoDB document identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One visible record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Application"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record not found or outside caller scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Application"
+        ],
+        "operationId": "putApplication",
+        "summary": "[Week 6 planned] PUT applications",
+        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
+        "x-implementation-status": "planned",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "MongoDB document identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Planned Week 6 success response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Application"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Planned Week 6 response when the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate profile or planned relationship conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Current Week 5 response: operation is planned for Week 6.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationUpdate"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Application"
+        ],
+        "operationId": "deleteApplication",
+        "summary": "[Week 6 planned] DELETE applications",
+        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
+        "x-implementation-status": "planned",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$",
+              "example": "507f1f77bcf86cd799439011"
+            },
+            "description": "MongoDB document identifier."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Planned Week 6 deletion success."
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Planned Week 6 response when the record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Duplicate profile or planned relationship conflict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Current Week 5 response: operation is planned for Week 6.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/google": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Start Google sign-in",
+        "description": "Open this route in a browser. Do not start the OAuth redirect flow through Try it out.",
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Redirect to Google with OAuth state."
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/google/callback": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Receive the Google OAuth callback",
+        "description": "Google invokes this route. Passport validates OAuth state and authenticates the Google identity.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Login established; redirect to /api-docs."
+          },
+          "400": {
+            "description": "Invalid ID, query, or request data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get the current identity or profile",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current account. New identities have needsOnboarding=true and no local _id or role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "_id": {
+                          "type": "string",
+                          "pattern": "^[a-fA-F0-9]{24}$",
+                          "example": "507f1f77bcf86cd799439011",
+                          "readOnly": true
+                        },
+                        "displayName": {
+                          "type": "string",
+                          "maxLength": 80,
+                          "example": "Julian Becerra",
+                          "minLength": 2
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "adopter",
+                            "shelterStaff",
+                            "admin"
+                          ],
+                          "example": "adopter"
+                        },
+                        "shelterId": {
+                          "type": "string",
+                          "pattern": "^[a-fA-F0-9]{24}$",
+                          "example": "507f1f77bcf86cd799439011"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "readOnly": true
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "readOnly": true
+                        },
+                        "email": {
+                          "type": "string",
+                          "format": "email"
+                        }
+                      },
+                      "required": []
+                    },
+                    "needsOnboarding": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/csrf": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get a CSRF token",
+        "description": "Copy csrfToken into Authorize → csrfToken before using a protected write operation. Get a new token after signing in again.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSRF token for this session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Csrf"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Sign out",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session destroyed and cookie cleared."
+          },
+          "401": {
+            "description": "Google sign-in is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or invalid CSRF token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Check service and database readiness",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "MongoDB is connected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "MongoDB is disconnected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Open the documentation",
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Redirect to /api-docs."
+          }
+        }
+      }
+    },
+    "/api-docs": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Open Swagger UI",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Swagger HTML interface.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "301": {
+            "description": "Normalize the trailing slash."
+          }
+        }
+      }
+    },
+    "/api-docs.json": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Get the OpenAPI specification",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3 specification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

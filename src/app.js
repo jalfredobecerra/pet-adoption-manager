@@ -5,13 +5,20 @@ const swaggerUi = require('swagger-ui-express');
 const { z } = require('zod');
 
 const resources = require('./resources');
+
 const {
   createReadControllers
 } = require('./controllers/read');
 
 const {
+  createWriteControllers
+} = require('./controllers/write');
+
+const {
   httpError,
+  handleErrors,
   requireIdentity,
+  requireProfile,
   csrfToken,
   requireCsrf,
   publicUser,
@@ -38,7 +45,6 @@ function createApp({
 
   app.use(
     helmet({
-      // Swagger UI uses inline initialization.
       contentSecurityPolicy: false
     })
   );
@@ -65,18 +71,24 @@ function createApp({
   app.use(passport.initialize());
   app.use(passport.session());
 
-  app.get('/', (req, res) => {
-    res.redirect('/api-docs');
-  });
+  app.get(
+    '/',
+    handleErrors((req, res) => {
+      res.redirect('/api-docs');
+    })
+  );
 
-  app.get('/health', (req, res) => {
-    const connected = dbReady();
+  app.get(
+    '/health',
+    handleErrors((req, res) => {
+      const connected = dbReady();
 
-    res.status(connected ? 200 : 503).json({
-      status: connected ? 'ok' : 'unavailable',
-      database: connected ? 'connected' : 'disconnected'
-    });
-  });
+      res.status(connected ? 200 : 503).json({
+        status: connected ? 'ok' : 'unavailable',
+        database: connected ? 'connected' : 'disconnected'
+      });
+    })
+  );
 
   app.get(
     '/auth/google',
@@ -87,79 +99,103 @@ function createApp({
 
   app.get(
     '/auth/google/callback',
-    (req, res, next) => {
+    handleErrors((req, res, next) => {
       if (req.query.error) {
-        return next(httpError(401, 'Google sign-in was canceled.'));
+        throw httpError(401, 'Google sign-in was canceled.');
       }
 
       if (
         typeof req.query.code !== 'string' ||
         typeof req.query.state !== 'string'
       ) {
-        return next(httpError(400, 'Invalid OAuth callback.'));
+        throw httpError(400, 'Invalid OAuth callback.');
       }
 
       next();
-    },
+    }),
     passport.authenticate('google', {
       failWithError: true
     }),
-    (req, res) => {
+    handleErrors((req, res) => {
       res.redirect('/api-docs');
-    }
+    })
   );
 
-  app.get('/auth/me', requireIdentity, (req, res) => {
-    res.json({
-      data: publicUser(req.user),
-      needsOnboarding: !req.user._id
-    });
-  });
+  app.get(
+    '/auth/me',
+    requireIdentity,
+    handleErrors((req, res) => {
+      res.json({
+        data: publicUser(req.user),
+        needsOnboarding: !req.user._id
+      });
+    })
+  );
 
-  app.get('/auth/csrf', requireIdentity, csrfToken);
+  app.get(
+    '/auth/csrf',
+    requireIdentity,
+    handleErrors(csrfToken)
+  );
 
   app.post(
     '/auth/logout',
     requireIdentity,
     requireCsrf,
-    (req, res, next) => {
-      req.logout((error) => {
-        if (error) {
-          return next(error);
-        }
-
-        req.session.destroy((destroyError) => {
-          if (destroyError) {
-            return next(destroyError);
+    handleErrors(async (req, res) => {
+      await new Promise((resolve, reject) => {
+        req.logout((error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
           }
-
-          res.clearCookie('pa.sid', {
-            httpOnly: true,
-            secure: production,
-            sameSite: 'lax',
-            path: '/'
-          });
-
-          res.status(204).end();
         });
       });
-    }
+
+      await new Promise((resolve, reject) => {
+        req.session.destroy((error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      });
+
+      res.clearCookie('pa.sid', {
+        httpOnly: true,
+        secure: production,
+        sameSite: 'lax',
+        path: '/'
+      });
+
+      res.status(204).end();
+    })
   );
 
   const reads = createReadControllers(models);
 
   for (const [resource, settings] of Object.entries(resources)) {
-    app.get(`/api/${resource}`, reads[resource].list);
+    app.get(
+      `/api/${resource}`,
+      handleErrors(reads[resource].list)
+    );
 
     app.get(
       `/api/${resource}/:${settings.idParam}`,
-      reads[resource].single
+      handleErrors(reads[resource].single)
     );
   }
 
   const profileInput = z
     .object({
-      displayName: z.string().trim().min(2).max(80).optional()
+      displayName: z
+        .string()
+        .trim()
+        .min(2)
+        .max(80)
+        .optional()
     })
     .strict();
 
@@ -167,7 +203,7 @@ function createApp({
     '/api/users',
     requireIdentity,
     requireCsrf,
-    async (req, res) => {
+    handleErrors(async (req, res) => {
       if (req.user._id) {
         throw httpError(409, 'Your profile already exists.');
       }
@@ -193,23 +229,53 @@ function createApp({
       res.status(201).json({
         data: publicUser(user)
       });
-    }
+    })
   );
 
-  function plannedWrite(req, res) {
+  const writes = createWriteControllers(models);
+
+  for (const resource of ['shelters', 'pets']) {
+    const settings = resources[resource];
+
+    app.post(
+      `/api/${resource}`,
+      requireProfile,
+      requireCsrf,
+      writes[resource].create
+    );
+
+    app.put(
+      `/api/${resource}/:${settings.idParam}`,
+      requireProfile,
+      requireCsrf,
+      writes[resource].update
+    );
+
+    app.delete(
+      `/api/${resource}/:${settings.idParam}`,
+      requireProfile,
+      requireCsrf,
+      writes[resource].remove
+    );
+  }
+
+  const plannedWrite = handleErrors((req, res) => {
     res.status(501).json({
       error: {
         status: 501,
         message: 'This operation is planned for Week 6.'
       }
     });
-  }
+  });
 
-  for (const [resource, settings] of Object.entries(resources)) {
-    if (resource !== 'users') {
+  // These remaining collections are outside the W05 two-collection CRUD scope.
+  for (const resource of ['users', 'applications']) {
+    const settings = resources[resource];
+
+    if (resource === 'applications') {
       app.post(
         `/api/${resource}`,
-        requireIdentity,
+        requireProfile,
         requireCsrf,
         plannedWrite
       );
@@ -217,14 +283,14 @@ function createApp({
 
     app.put(
       `/api/${resource}/:${settings.idParam}`,
-      requireIdentity,
+      requireProfile,
       requireCsrf,
       plannedWrite
     );
 
     app.delete(
       `/api/${resource}/:${settings.idParam}`,
-      requireIdentity,
+      requireProfile,
       requireCsrf,
       plannedWrite
     );
@@ -232,9 +298,12 @@ function createApp({
 
   const specification = buildOpenApi();
 
-  app.get('/api-docs.json', (req, res) => {
-    res.json(specification);
-  });
+  app.get(
+    '/api-docs.json',
+    handleErrors((req, res) => {
+      res.json(specification);
+    })
+  );
 
   app.use(
     '/api-docs',
