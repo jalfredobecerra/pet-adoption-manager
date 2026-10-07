@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Pet Adoption Manager API",
-    "version": "0.2.0",
-    "description": "Week 5: complete CRUD for shelters and pets.\n\n[Sign in with Google](/auth/google), then return here.\nUse GET /auth/me to check your identity and application role.\nNew identities must complete POST /api/users.\n\nPublic GET operations do not require sign-in.\nProtected operations use the browser session cookie.\nBefore writes, obtain GET /auth/csrf and enter its token\nthrough Authorize → csrfToken.\n\nPOST and PUT validate permitted fields.\nPUT updates supplied fields and preserves omitted fields.\nUnknown fields and empty updates return 400.\n\nRemaining user and application writes are planned for Week 6."
+    "version": "0.3.0",
+    "description": "Pet Adoption Manager: CRUD for users, shelters, pets, and applications.\nOpen /auth/google in your browser to sign in. Inspect /auth/me.\nNew Google identities complete POST /api/users; role defaults to adopter.\nGet /auth/csrf and enter the token in Authorize -> csrfToken before writes.\nThe browser sends the HttpOnly session cookie automatically.\nEvery POST, PUT, and DELETE requires authentication and a CSRF token.\nPOST and PUT allowlist and validate fields. PUT updates supplied fields.\nApplication approval records a review decision. It does not automatically\nchange the pet adoptionStatus; authorized staff manage that through PUT /api/pets/{petId}.\nOnly non-administrator profiles without application references can be deleted."
   },
   "servers": [
     {
@@ -175,12 +175,13 @@
       },
       "UserUpdate": {
         "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
         "properties": {
           "displayName": {
             "type": "string",
-            "maxLength": 80,
-            "example": "Julian Becerra",
-            "minLength": 2
+            "minLength": 2,
+            "maxLength": 80
           },
           "role": {
             "type": "string",
@@ -188,18 +189,14 @@
               "adopter",
               "shelterStaff",
               "admin"
-            ],
-            "example": "adopter"
+            ]
           },
           "shelterId": {
             "type": "string",
             "pattern": "^[a-fA-F0-9]{24}$",
-            "example": "507f1f77bcf86cd799439011"
+            "nullable": true
           }
-        },
-        "required": [],
-        "minProperties": 1,
-        "additionalProperties": false
+        }
       },
       "Shelter": {
         "type": "object",
@@ -673,7 +670,8 @@
           "contactPhone": {
             "type": "string",
             "maxLength": 30,
-            "example": "555-0101"
+            "example": "555-0101",
+            "minLength": 1
           },
           "housingType": {
             "type": "string",
@@ -744,7 +742,8 @@
           "contactPhone": {
             "type": "string",
             "maxLength": 30,
-            "example": "555-0101"
+            "example": "555-0101",
+            "minLength": 1
           },
           "housingType": {
             "type": "string",
@@ -781,7 +780,8 @@
           "contactPhone": {
             "type": "string",
             "maxLength": 30,
-            "example": "555-0101"
+            "example": "555-0101",
+            "minLength": 1
           },
           "housingType": {
             "type": "string",
@@ -805,7 +805,6 @@
           "status": {
             "type": "string",
             "enum": [
-              "submitted",
               "underReview",
               "approved",
               "rejected",
@@ -817,6 +816,52 @@
         "required": [],
         "minProperties": 1,
         "additionalProperties": false
+      },
+      "UserWrite": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011",
+            "readOnly": true
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 80,
+            "example": "Julian Becerra",
+            "minLength": 2
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "adopter",
+              "shelterStaff",
+              "admin"
+            ],
+            "example": "adopter"
+          },
+          "shelterId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$",
+            "example": "507f1f77bcf86cd799439011"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": []
       }
     }
   },
@@ -828,7 +873,7 @@
         ],
         "operationId": "listUser",
         "summary": "List users",
-        "description": "Lists require an administrator. Individual reads allow the owner or an administrator. OAuth identifiers and email are omitted from these GET responses. Results are paginated and ordered by ID. Unsupported query parameters return 400.",
+        "description": "Administrators may list users. Owners and administrators may read one profile. GET responses omit email and OAuth identifiers. Results are ordered by ID. Unsupported query parameters return 400.",
         "security": [
           {
             "sessionCookie": []
@@ -929,8 +974,8 @@
           "User"
         ],
         "operationId": "postUser",
-        "summary": "Complete your OAuth profile",
-        "description": "Creates the current verified OAuth identity’s profile. Optional displayName may be supplied. Identity, email, and adopter role come from the server. A second creation attempt returns 409.",
+        "summary": "POST users",
+        "description": "Create only your signed-in Google identity profile. Optional displayName; identity and email are server-controlled, and role defaults to adopter. Existing profiles return 409.",
         "x-implementation-status": "implemented",
         "security": [
           {
@@ -941,23 +986,22 @@
         "parameters": [],
         "responses": {
           "201": {
-            "description": "Profile created.",
+            "description": "Created.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/User"
+                      "$ref": "#/components/schemas/UserWrite"
                     }
-                  },
-                  "required": []
+                  }
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid ID, query, or request data.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -967,7 +1011,7 @@
             }
           },
           "401": {
-            "description": "Google sign-in is required.",
+            "description": "Google sign-in required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -977,7 +1021,7 @@
             }
           },
           "403": {
-            "description": "Access denied or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -987,7 +1031,7 @@
             }
           },
           "409": {
-            "description": "Duplicate profile or planned relationship conflict.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1026,7 +1070,7 @@
         ],
         "operationId": "getUser",
         "summary": "Get one user",
-        "description": "Lists require an administrator. Individual reads allow the owner or an administrator. OAuth identifiers and email are omitted from these GET responses.",
+        "description": "Administrators may list users. Owners and administrators may read one profile. GET responses omit email and OAuth identifiers.",
         "security": [
           {
             "sessionCookie": []
@@ -1119,9 +1163,9 @@
           "User"
         ],
         "operationId": "putUser",
-        "summary": "[Week 6 planned] PUT users",
-        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Lists require an administrator. Individual reads allow the owner or an administrator. OAuth identifiers and email are omitted from these GET responses. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
-        "x-implementation-status": "planned",
+        "summary": "PUT users",
+        "description": "Owners may edit displayName. Administrators may edit other profiles, roles, and shelter assignments. Administrators cannot change their own permissions. shelterStaff requires an existing shelter; other roles cannot have shelter assignments. Omitted fields are preserved, except assignments are cleared when changing to a non-staff role.",
+        "x-implementation-status": "implemented",
         "security": [
           {
             "sessionCookie": [],
@@ -1143,23 +1187,22 @@
         ],
         "responses": {
           "200": {
-            "description": "Planned Week 6 success response.",
+            "description": "Updated.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/User"
+                      "$ref": "#/components/schemas/UserWrite"
                     }
-                  },
-                  "required": []
+                  }
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid ID, query, or request data.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1169,7 +1212,7 @@
             }
           },
           "401": {
-            "description": "Google sign-in is required.",
+            "description": "Google sign-in required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1179,7 +1222,7 @@
             }
           },
           "403": {
-            "description": "Access denied or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1189,7 +1232,7 @@
             }
           },
           "404": {
-            "description": "Planned Week 6 response when the record does not exist.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1199,7 +1242,7 @@
             }
           },
           "409": {
-            "description": "Duplicate profile or planned relationship conflict.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1210,16 +1253,6 @@
           },
           "500": {
             "description": "Unexpected server or database failure.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Current Week 5 response: operation is planned for Week 6.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1245,9 +1278,9 @@
           "User"
         ],
         "operationId": "deleteUser",
-        "summary": "[Week 6 planned] DELETE users",
-        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Lists require an administrator. Individual reads allow the owner or an administrator. OAuth identifiers and email are omitted from these GET responses. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
-        "x-implementation-status": "planned",
+        "summary": "DELETE users",
+        "description": "Owner or administrator. Administrator profiles cannot be deleted. Application adopterId or reviewedBy references block deletion with 409. Deleting a local profile does not delete the Google account; its identity can onboard again.",
+        "x-implementation-status": "implemented",
         "security": [
           {
             "sessionCookie": [],
@@ -1269,10 +1302,10 @@
         ],
         "responses": {
           "204": {
-            "description": "Planned Week 6 deletion success."
+            "description": "Deleted. Empty response body."
           },
           "400": {
-            "description": "Invalid ID, query, or request data.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1282,7 +1315,7 @@
             }
           },
           "401": {
-            "description": "Google sign-in is required.",
+            "description": "Google sign-in required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1292,7 +1325,7 @@
             }
           },
           "403": {
-            "description": "Access denied or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1302,7 +1335,7 @@
             }
           },
           "404": {
-            "description": "Planned Week 6 response when the record does not exist.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1312,7 +1345,7 @@
             }
           },
           "409": {
-            "description": "Duplicate profile or planned relationship conflict.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1323,16 +1356,6 @@
           },
           "500": {
             "description": "Unexpected server or database failure.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Current Week 5 response: operation is planned for Week 6.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1351,7 +1374,7 @@
         ],
         "operationId": "listShelter",
         "summary": "List shelters",
-        "description": "Public reads. Planned creates and deletes require an administrator; updates allow assigned shelter staff or an administrator. Results are paginated and ordered by ID. Unsupported query parameters return 400.",
+        "description": "Public reads. Lists are paginated. Results are ordered by ID. Unsupported query parameters return 400.",
         "security": [],
         "parameters": [
           {
@@ -1449,7 +1472,7 @@
         ],
         "operationId": "postShelter",
         "summary": "POST shelters",
-        "description": "Administrator only. Creates a shelter. String fields are trimmed. Request fields are allowlisted.",
+        "description": "Administrator only. Creates a shelter.",
         "x-implementation-status": "implemented",
         "security": [
           {
@@ -1460,7 +1483,7 @@
         "parameters": [],
         "responses": {
           "201": {
-            "description": "Created successfully.",
+            "description": "Created.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1475,7 +1498,7 @@
             }
           },
           "400": {
-            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1495,7 +1518,7 @@
             }
           },
           "403": {
-            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1505,7 +1528,7 @@
             }
           },
           "409": {
-            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1515,7 +1538,7 @@
             }
           },
           "500": {
-            "description": "Unexpected database or server failure.",
+            "description": "Unexpected server or database failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1544,7 +1567,7 @@
         ],
         "operationId": "getShelter",
         "summary": "Get one shelter",
-        "description": "Public reads. Planned creates and deletes require an administrator; updates allow assigned shelter staff or an administrator.",
+        "description": "Public reads. Lists are paginated.",
         "security": [],
         "parameters": [
           {
@@ -1634,7 +1657,7 @@
         ],
         "operationId": "putShelter",
         "summary": "PUT shelters",
-        "description": "Administrator or staff assigned to this shelter. Updates supplied fields. String fields are trimmed. Request fields are allowlisted.",
+        "description": "Administrator or assigned shelter staff. Updates supplied fields.",
         "x-implementation-status": "implemented",
         "security": [
           {
@@ -1655,7 +1678,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Updated successfully.",
+            "description": "Updated.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1670,7 +1693,7 @@
             }
           },
           "400": {
-            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1690,7 +1713,7 @@
             }
           },
           "403": {
-            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1700,7 +1723,7 @@
             }
           },
           "404": {
-            "description": "Record or referenced shelter not found.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1710,7 +1733,7 @@
             }
           },
           "409": {
-            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1720,7 +1743,7 @@
             }
           },
           "500": {
-            "description": "Unexpected database or server failure.",
+            "description": "Unexpected server or database failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1747,7 +1770,7 @@
         ],
         "operationId": "deleteShelter",
         "summary": "DELETE shelters",
-        "description": "Administrator only. Deletes a shelter only when no pets, applications, or assigned users reference it. String fields are trimmed. Request fields are allowlisted.",
+        "description": "Administrator only. Pets, applications, or assigned users block deletion.",
         "x-implementation-status": "implemented",
         "security": [
           {
@@ -1768,10 +1791,10 @@
         ],
         "responses": {
           "204": {
-            "description": "Deleted successfully. Empty response body."
+            "description": "Deleted. Empty response body."
           },
           "400": {
-            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1791,7 +1814,7 @@
             }
           },
           "403": {
-            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1801,7 +1824,7 @@
             }
           },
           "404": {
-            "description": "Record or referenced shelter not found.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1811,7 +1834,7 @@
             }
           },
           "409": {
-            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1821,7 +1844,7 @@
             }
           },
           "500": {
-            "description": "Unexpected database or server failure.",
+            "description": "Unexpected server or database failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1840,7 +1863,7 @@
         ],
         "operationId": "listPet",
         "summary": "List pets",
-        "description": "Public reads. Planned writes allow staff of the owning shelter or an administrator. Results are paginated and ordered by ID. Unsupported query parameters return 400.",
+        "description": "Public reads. Lists support species, status, shelterId, page, and limit filters. Results are ordered by ID. Unsupported query parameters return 400.",
         "security": [],
         "parameters": [
           {
@@ -1978,7 +2001,7 @@
         ],
         "operationId": "postPet",
         "summary": "POST pets",
-        "description": "Administrator or staff assigned to the supplied shelter. The referenced shelter must exist. String fields are trimmed. Request fields are allowlisted.",
+        "description": "Administrator or assigned shelter staff. The referenced shelter must exist.",
         "x-implementation-status": "implemented",
         "security": [
           {
@@ -1989,7 +2012,7 @@
         "parameters": [],
         "responses": {
           "201": {
-            "description": "Created successfully.",
+            "description": "Created.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2004,7 +2027,7 @@
             }
           },
           "400": {
-            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2024,7 +2047,7 @@
             }
           },
           "403": {
-            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2034,7 +2057,7 @@
             }
           },
           "404": {
-            "description": "Record or referenced shelter not found.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2044,7 +2067,7 @@
             }
           },
           "409": {
-            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2054,7 +2077,7 @@
             }
           },
           "500": {
-            "description": "Unexpected database or server failure.",
+            "description": "Unexpected server or database failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2083,7 +2106,7 @@
         ],
         "operationId": "getPet",
         "summary": "Get one pet",
-        "description": "Public reads. Planned writes allow staff of the owning shelter or an administrator.",
+        "description": "Public reads. Lists support species, status, shelterId, page, and limit filters.",
         "security": [],
         "parameters": [
           {
@@ -2173,7 +2196,7 @@
         ],
         "operationId": "putPet",
         "summary": "PUT pets",
-        "description": "Administrator or staff of the current shelter. Only administrators may move a pet to another shelter, and pets with application records cannot be moved. String fields are trimmed. Request fields are allowlisted.",
+        "description": "Administrator or staff of the current shelter. Only administrators may transfer pets; existing applications block transfers.",
         "x-implementation-status": "implemented",
         "security": [
           {
@@ -2194,7 +2217,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Updated successfully.",
+            "description": "Updated.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2209,7 +2232,7 @@
             }
           },
           "400": {
-            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2229,7 +2252,7 @@
             }
           },
           "403": {
-            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2239,7 +2262,7 @@
             }
           },
           "404": {
-            "description": "Record or referenced shelter not found.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2249,7 +2272,7 @@
             }
           },
           "409": {
-            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2259,7 +2282,7 @@
             }
           },
           "500": {
-            "description": "Unexpected database or server failure.",
+            "description": "Unexpected server or database failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2286,7 +2309,7 @@
         ],
         "operationId": "deletePet",
         "summary": "DELETE pets",
-        "description": "Administrator or staff of the current shelter. Pets with application records cannot be deleted. String fields are trimmed. Request fields are allowlisted.",
+        "description": "Administrator or staff of the current shelter. Existing applications block deletion.",
         "x-implementation-status": "implemented",
         "security": [
           {
@@ -2307,10 +2330,10 @@
         ],
         "responses": {
           "204": {
-            "description": "Deleted successfully. Empty response body."
+            "description": "Deleted. Empty response body."
           },
           "400": {
-            "description": "Invalid ID, malformed JSON, or invalid request fields.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2330,7 +2353,7 @@
             }
           },
           "403": {
-            "description": "Profile incomplete, insufficient permissions, or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2340,7 +2363,7 @@
             }
           },
           "404": {
-            "description": "Record or referenced shelter not found.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2350,7 +2373,7 @@
             }
           },
           "409": {
-            "description": "Referenced records prevent the operation, or a duplicate record exists.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2360,7 +2383,7 @@
             }
           },
           "500": {
-            "description": "Unexpected database or server failure.",
+            "description": "Unexpected server or database failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2379,7 +2402,7 @@
         ],
         "operationId": "listApplication",
         "summary": "List applications",
-        "description": "Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator. Results are paginated and ordered by ID. Unsupported query parameters return 400.",
+        "description": "Administrators see all applications; adopters see their own; shelter staff see assigned-shelter applications. Inaccessible individual records return 404. Results are ordered by ID. Unsupported query parameters return 400.",
         "security": [
           {
             "sessionCookie": []
@@ -2480,9 +2503,9 @@
           "Application"
         ],
         "operationId": "postApplication",
-        "summary": "[Week 6 planned] POST applications",
-        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
-        "x-implementation-status": "planned",
+        "summary": "POST applications",
+        "description": "Any completed signed-in profile may apply for an available pet. adopterId comes from the session, shelterId from the pet, and status is submitted. One application per pet/adopter pair; duplicates return 409.",
+        "x-implementation-status": "implemented",
         "security": [
           {
             "sessionCookie": [],
@@ -2492,7 +2515,7 @@
         "parameters": [],
         "responses": {
           "201": {
-            "description": "Planned Week 6 success response.",
+            "description": "Created.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2501,14 +2524,13 @@
                     "data": {
                       "$ref": "#/components/schemas/Application"
                     }
-                  },
-                  "required": []
+                  }
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid ID, query, or request data.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2518,7 +2540,7 @@
             }
           },
           "401": {
-            "description": "Google sign-in is required.",
+            "description": "Google sign-in required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2528,7 +2550,7 @@
             }
           },
           "403": {
-            "description": "Access denied or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2538,7 +2560,7 @@
             }
           },
           "404": {
-            "description": "Planned Week 6 response when the record does not exist.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2548,7 +2570,7 @@
             }
           },
           "409": {
-            "description": "Duplicate profile or planned relationship conflict.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2559,16 +2581,6 @@
           },
           "500": {
             "description": "Unexpected server or database failure.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Current Week 5 response: operation is planned for Week 6.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2597,7 +2609,7 @@
         ],
         "operationId": "getApplication",
         "summary": "Get one application",
-        "description": "Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator.",
+        "description": "Administrators see all applications; adopters see their own; shelter staff see assigned-shelter applications. Inaccessible individual records return 404.",
         "security": [
           {
             "sessionCookie": []
@@ -2690,9 +2702,9 @@
           "Application"
         ],
         "operationId": "putApplication",
-        "summary": "[Week 6 planned] PUT applications",
-        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
-        "x-implementation-status": "planned",
+        "summary": "PUT applications",
+        "description": "Applicant may edit contactPhone, housingType, hasOtherPets, and motivation only while submitted, or withdraw submitted/underReview applications. A different administrator or assigned staff member may review. submitted -> underReview/approved/rejected; underReview -> approved/rejected. Review changes set reviewedBy and reviewedAt. Final statuses cannot be reopened. Invalid transitions or concurrent status changes return 409.",
+        "x-implementation-status": "implemented",
         "security": [
           {
             "sessionCookie": [],
@@ -2714,7 +2726,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Planned Week 6 success response.",
+            "description": "Updated.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2723,14 +2735,13 @@
                     "data": {
                       "$ref": "#/components/schemas/Application"
                     }
-                  },
-                  "required": []
+                  }
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid ID, query, or request data.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2740,7 +2751,7 @@
             }
           },
           "401": {
-            "description": "Google sign-in is required.",
+            "description": "Google sign-in required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2750,7 +2761,7 @@
             }
           },
           "403": {
-            "description": "Access denied or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2760,7 +2771,7 @@
             }
           },
           "404": {
-            "description": "Planned Week 6 response when the record does not exist.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2770,7 +2781,7 @@
             }
           },
           "409": {
-            "description": "Duplicate profile or planned relationship conflict.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2781,16 +2792,6 @@
           },
           "500": {
             "description": "Unexpected server or database failure.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Current Week 5 response: operation is planned for Week 6.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2816,9 +2817,9 @@
           "Application"
         ],
         "operationId": "deleteApplication",
-        "summary": "[Week 6 planned] DELETE applications",
-        "description": "Current Week 5 implementation returns 501 after session and CSRF checks. Planned behavior: Reads are limited to the adopter, assigned shelter staff, or an administrator. Inaccessible individual records return 404. Planned create operations allow adopters; reviews require assigned staff or an administrator. PUT updates permitted fields. Application status changes must follow ownership and review rules. Deletes must preserve referenced records.",
-        "x-implementation-status": "planned",
+        "summary": "DELETE applications",
+        "description": "Applicant may delete submitted or withdrawn applications. Administrators and assigned staff may delete non-approved applications. Approved applications are retained; deletion returns 409.",
+        "x-implementation-status": "implemented",
         "security": [
           {
             "sessionCookie": [],
@@ -2840,10 +2841,10 @@
         ],
         "responses": {
           "204": {
-            "description": "Planned Week 6 deletion success."
+            "description": "Deleted. Empty response body."
           },
           "400": {
-            "description": "Invalid ID, query, or request data.",
+            "description": "Invalid ID, malformed JSON, or validation failure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2853,7 +2854,7 @@
             }
           },
           "401": {
-            "description": "Google sign-in is required.",
+            "description": "Google sign-in required.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2863,7 +2864,7 @@
             }
           },
           "403": {
-            "description": "Access denied or invalid CSRF token.",
+            "description": "Profile incomplete, permissions denied, or invalid CSRF token.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2873,7 +2874,7 @@
             }
           },
           "404": {
-            "description": "Planned Week 6 response when the record does not exist.",
+            "description": "Record or referenced record not found, or inaccessible application.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2883,7 +2884,7 @@
             }
           },
           "409": {
-            "description": "Duplicate profile or planned relationship conflict.",
+            "description": "Duplicate, relationship conflict, protected record, invalid transition, or concurrent modification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2894,16 +2895,6 @@
           },
           "500": {
             "description": "Unexpected server or database failure.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Current Week 5 response: operation is planned for Week 6.",
             "content": {
               "application/json": {
                 "schema": {

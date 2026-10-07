@@ -2,7 +2,6 @@ const express = require('express');
 const session = require('express-session');
 const helmet = require('helmet');
 const swaggerUi = require('swagger-ui-express');
-const { z } = require('zod');
 
 const resources = require('./resources');
 
@@ -15,6 +14,10 @@ const {
 } = require('./controllers/write');
 
 const {
+  createWeek6Controllers
+} = require('./controllers/week6');
+
+const {
   httpError,
   handleErrors,
   requireIdentity,
@@ -25,7 +28,7 @@ const {
   errorHandler
 } = require('./middleware/security');
 
-const buildOpenApi = require('../docs/openapi');
+const buildOpenApi = require('../docs/week6');
 
 function createApp({
   models,
@@ -85,7 +88,9 @@ function createApp({
 
       res.status(connected ? 200 : 503).json({
         status: connected ? 'ok' : 'unavailable',
-        database: connected ? 'connected' : 'disconnected'
+        database: connected
+          ? 'connected'
+          : 'disconnected'
       });
     })
   );
@@ -101,14 +106,20 @@ function createApp({
     '/auth/google/callback',
     handleErrors((req, res, next) => {
       if (req.query.error) {
-        throw httpError(401, 'Google sign-in was canceled.');
+        throw httpError(
+          401,
+          'Google sign-in was canceled.'
+        );
       }
 
       if (
         typeof req.query.code !== 'string' ||
         typeof req.query.state !== 'string'
       ) {
-        throw httpError(400, 'Invalid OAuth callback.');
+        throw httpError(
+          400,
+          'Invalid OAuth callback.'
+        );
       }
 
       next();
@@ -145,21 +156,15 @@ function createApp({
     handleErrors(async (req, res) => {
       await new Promise((resolve, reject) => {
         req.logout((error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
+          if (error) reject(error);
+          else resolve();
         });
       });
 
       await new Promise((resolve, reject) => {
         req.session.destroy((error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
+          if (error) reject(error);
+          else resolve();
         });
       });
 
@@ -176,7 +181,10 @@ function createApp({
 
   const reads = createReadControllers(models);
 
-  for (const [resource, settings] of Object.entries(resources)) {
+  for (
+    const [resource, settings]
+    of Object.entries(resources)
+  ) {
     app.get(
       `/api/${resource}`,
       handleErrors(reads[resource].list)
@@ -188,58 +196,23 @@ function createApp({
     );
   }
 
-  const profileInput = z
-    .object({
-      displayName: z
-        .string()
-        .trim()
-        .min(2)
-        .max(80)
-        .optional()
-    })
-    .strict();
+  const week6 = createWeek6Controllers(models);
 
-  app.post(
-    '/api/users',
-    requireIdentity,
-    requireCsrf,
-    handleErrors(async (req, res) => {
-      if (req.user._id) {
-        throw httpError(409, 'Your profile already exists.');
-      }
+  const writes = {
+    ...createWriteControllers(models),
+    ...week6
+  };
 
-      const parsed = profileInput.safeParse(req.body ?? {});
-
-      if (!parsed.success) {
-        throw httpError(
-          400,
-          'Use only displayName, containing 2 to 80 characters.'
-        );
-      }
-
-      const user = await models.users.create({
-        oauthProvider: req.user.oauthProvider,
-        providerId: req.user.providerId,
-        email: req.user.email,
-        displayName:
-          parsed.data.displayName || req.user.displayName,
-        role: 'adopter'
-      });
-
-      res.status(201).json({
-        data: publicUser(user)
-      });
-    })
-  );
-
-  const writes = createWriteControllers(models);
-
-  for (const resource of ['shelters', 'pets']) {
-    const settings = resources[resource];
-
+  for (
+    const [resource, settings]
+    of Object.entries(resources)
+  ) {
+    // New Google identities can onboard before having a local user ID.
     app.post(
       `/api/${resource}`,
-      requireProfile,
+      resource === 'users'
+        ? requireIdentity
+        : requireProfile,
       requireCsrf,
       writes[resource].create
     );
@@ -256,43 +229,6 @@ function createApp({
       requireProfile,
       requireCsrf,
       writes[resource].remove
-    );
-  }
-
-  const plannedWrite = handleErrors((req, res) => {
-    res.status(501).json({
-      error: {
-        status: 501,
-        message: 'This operation is planned for Week 6.'
-      }
-    });
-  });
-
-  // These remaining collections are outside the W05 two-collection CRUD scope.
-  for (const resource of ['users', 'applications']) {
-    const settings = resources[resource];
-
-    if (resource === 'applications') {
-      app.post(
-        `/api/${resource}`,
-        requireProfile,
-        requireCsrf,
-        plannedWrite
-      );
-    }
-
-    app.put(
-      `/api/${resource}/:${settings.idParam}`,
-      requireProfile,
-      requireCsrf,
-      plannedWrite
-    );
-
-    app.delete(
-      `/api/${resource}/:${settings.idParam}`,
-      requireProfile,
-      requireCsrf,
-      plannedWrite
     );
   }
 
